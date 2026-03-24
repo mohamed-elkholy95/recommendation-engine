@@ -1,4 +1,33 @@
-"""Content-based filtering recommender."""
+"""Content-based filtering recommender.
+
+Content-based filtering recommends items similar to what the user has liked
+before, using item *features* (metadata) rather than other users' behavior.
+This is the complement to collaborative filtering — it doesn't need other
+users but does need rich item descriptions.
+
+Approach:
+    1. **Feature Extraction**: Convert raw metadata (genres, descriptions)
+       into numerical vectors using TF-IDF and multi-hot encoding.
+    2. **User Profile**: Average the feature vectors of items the user liked
+       to create a user preference vector.
+    3. **Similarity**: Rank all items by cosine similarity to the user profile.
+
+Advantages over CF:
+    - No cold start for *new items* (only needs metadata, not ratings)
+    - Explainable ("recommended because you liked similar genres")
+    - Works with a single user's history
+
+Limitations:
+    - Suffers from *over-specialization* (filter bubble) — only recommends
+      items similar to what the user already knows
+    - Cannot capture serendipitous cross-genre discoveries
+    - Quality depends heavily on feature engineering
+
+References:
+    - Lops, P., de Gemmis, M., & Semeraro, G. (2011). Content-based
+      Recommender Systems: State of the Art and Trends. Recommender Systems
+      Handbook, Springer.
+"""
 import logging
 from typing import Dict, List, Optional
 
