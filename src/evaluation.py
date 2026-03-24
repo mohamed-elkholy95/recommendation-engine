@@ -1,4 +1,23 @@
-"""Evaluation metrics for recommendation systems."""
+"""Evaluation metrics for recommendation systems.
+
+This module implements standard information retrieval and recommendation
+system metrics. Metrics fall into several categories:
+
+**Accuracy Metrics** (how well predictions match ground truth):
+    - NDCG@K: Rewards relevant items appearing earlier in the ranked list
+    - MAP@K: Precision averaged across all relevant items
+    - Precision@K / Recall@K: Classic IR metrics at cutoff K
+    - Hit Rate@K: Binary — did at least one relevant item appear?
+
+**Beyond-Accuracy Metrics** (diversity, novelty, coverage):
+    - Catalog Coverage: What fraction of items gets recommended?
+    - Intra-List Diversity: How different are items within a single list?
+    - Novelty: Are we recommending popular or surprising items?
+
+In practice, accuracy alone is insufficient — a system that only recommends
+blockbusters would score well on accuracy but provide poor user experience.
+The beyond-accuracy metrics help diagnose filter bubbles and popularity bias.
+"""
 import logging
 from typing import Dict, List
 
@@ -75,6 +94,58 @@ def hit_rate_at_k(y_true: List[List[int]], y_pred: List[List[int]], k: int = 10)
         if set(true_items) & set(pred_items[:k]):
             hits += 1
     return hits / len(y_true) if y_true else 0.0
+
+
+def precision_at_k(y_true: List[List[int]], y_pred: List[List[int]], k: int = 10) -> float:
+    """Precision at K — fraction of recommended items that are relevant.
+
+    Precision answers: "Of the K items I recommended, how many were right?"
+    High precision means few false positives (irrelevant recommendations).
+
+    Args:
+        y_true: Ground truth relevant items per user.
+        y_pred: Predicted ranked items per user.
+        k: Cutoff position.
+
+    Returns:
+        Average Precision@K across all users.
+    """
+    precisions = []
+    for true_items, pred_items in zip(y_true, y_pred):
+        true_set = set(true_items)
+        top_k = pred_items[:k]
+        hits = sum(1 for item in top_k if item in true_set)
+        precisions.append(hits / k)
+    return float(np.mean(precisions)) if precisions else 0.0
+
+
+def recall_at_k(y_true: List[List[int]], y_pred: List[List[int]], k: int = 10) -> float:
+    """Recall at K — fraction of relevant items that were recommended.
+
+    Recall answers: "Of all the items the user would like, how many did
+    I manage to include in my top-K list?"
+    High recall means few false negatives (missed relevant items).
+
+    Note: Recall@K is bounded by min(K, |relevant items|) / |relevant items|,
+    so it can never reach 1.0 if the user has more relevant items than K.
+
+    Args:
+        y_true: Ground truth relevant items per user.
+        y_pred: Predicted ranked items per user.
+        k: Cutoff position.
+
+    Returns:
+        Average Recall@K across all users.
+    """
+    recalls = []
+    for true_items, pred_items in zip(y_true, y_pred):
+        true_set = set(true_items)
+        if not true_set:
+            continue
+        top_k = pred_items[:k]
+        hits = sum(1 for item in top_k if item in true_set)
+        recalls.append(hits / len(true_set))
+    return float(np.mean(recalls)) if recalls else 0.0
 
 
 def catalog_coverage(
