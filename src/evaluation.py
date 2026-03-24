@@ -148,6 +148,36 @@ def recall_at_k(y_true: List[List[int]], y_pred: List[List[int]], k: int = 10) -
     return float(np.mean(recalls)) if recalls else 0.0
 
 
+def mrr(y_true: List[List[int]], y_pred: List[List[int]]) -> float:
+    """Mean Reciprocal Rank — average of 1/rank of the first relevant item.
+
+    MRR focuses on the position of the *first* correct result. It's
+    particularly useful for "navigational" queries where the user wants
+    one specific item. A higher MRR means relevant items tend to appear
+    near the top of the list.
+
+    Example: if the first relevant item is at position 3, its reciprocal
+    rank is 1/3 ≈ 0.333. If it's at position 1, RR = 1.0.
+
+    Args:
+        y_true: Ground truth relevant items per user.
+        y_pred: Predicted ranked items per user.
+
+    Returns:
+        Mean Reciprocal Rank across all users.
+    """
+    rr_values = []
+    for true_items, pred_items in zip(y_true, y_pred):
+        true_set = set(true_items)
+        rr = 0.0
+        for rank, item in enumerate(pred_items, start=1):
+            if item in true_set:
+                rr = 1.0 / rank
+                break
+        rr_values.append(rr)
+    return float(np.mean(rr_values)) if rr_values else 0.0
+
+
 def catalog_coverage(
     recommendations: Dict[int, List[int]],
     n_items: int,
