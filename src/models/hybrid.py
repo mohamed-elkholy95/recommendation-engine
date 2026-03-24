@@ -1,4 +1,38 @@
-"""Hybrid recommender combining multiple approaches."""
+"""Hybrid recommender combining multiple approaches.
+
+Hybrid recommendation combines multiple recommendation strategies to
+overcome each individual method's weaknesses:
+
+    - **CF** excels at capturing collaborative patterns but suffers from
+      cold start (new users/items with no interactions).
+    - **Content-based** handles new items well but tends toward
+      over-specialization (filter bubbles).
+    - **Neural CF** can model non-linear interactions but requires more
+      training data and compute.
+
+This module uses **weighted score fusion**: each recommender produces
+candidate scores independently, then scores are combined via a weighted
+average. This is simple, interpretable, and effective.
+
+For diversity, we apply **Maximal Marginal Relevance (MMR)** re-ranking,
+which balances relevance with novelty by penalizing items too similar
+to already-selected recommendations.
+
+Taxonomy of hybrid approaches (Burke, 2002):
+    1. Weighted — linear combination of scores (used here)
+    2. Switching — pick one model based on context
+    3. Mixed — present results from multiple models side-by-side
+    4. Feature combination — use one model's output as input to another
+    5. Cascade — sequential refinement
+    6. Feature augmentation — use one model to generate features for another
+    7. Meta-level — one model produces a learned representation for another
+
+References:
+    - Burke, R. (2002). Hybrid Recommender Systems: Survey and Experiments.
+      User Modeling and User-Adapted Interaction.
+    - Carbonell, J. & Goldstein, J. (1998). The Use of MMR, Diversity-Based
+      Reranking for Reordering Documents. SIGIR.
+"""
 import logging
 from typing import Any, Dict, List, Optional
 
