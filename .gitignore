@@ -7,7 +7,7 @@ __pycache__/
 .pytest_cache/
 *.egg
 data/
-models/
+/models/
 outputs/
 reports/
 logs/
@@ -19,3 +19,4 @@ metrics/
 *.log
 .idea/
 .vscode/
+AGENTS.md
