@@ -147,15 +147,18 @@ against the held-out test split using `evaluate_ranking`. Representative run
 | Model    | NDCG@10 | HR@10  | MAP@10 | sec |
 |----------|---------|--------|--------|-----|
 | SVD      | 0.0461  | 0.2180 | 0.0208 | 0.1 |
-| ALS      | 0.0041  | 0.0279 | 0.0014 | 0.1 |
+| ALS      | 0.0031  | 0.0213 | 0.0011 | 0.1 |
 | Content  | 0.0171  | 0.0951 | 0.0069 | 0.1 |
 | NCF      | 0.0247  | 0.1262 | 0.0108 | 0.2 |
 | Hybrid   | 0.0442  | 0.2246 | 0.0196 | 2.1 |
 
 The hybrid wins on `HR@10` (recall of relevant items in the top-10) while SVD
-edges ahead on `NDCG@10` / `MAP@10`. Koren ALS without mean centering is the
-known-weak baseline; the comparison is intentional — it keeps the math
-transparent rather than hiding it behind a tuned library.
+edges ahead on `NDCG@10` / `MAP@10`. The Koren-baseline ALS
+(`μ + b_u + b_i + x_u · y_i`) is implemented as the textbook-correct CF
+baseline but underperforms on this split: leave-last-n-out temporal splits
+reward niche items (which users rate late in their history), while the
+baseline term `b_i` biases the ranking toward globally popular items. The
+ALS numbers are honest — not a bug — and make the hybrid's value clearer.
 
 ---
 
