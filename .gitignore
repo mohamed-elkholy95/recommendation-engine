@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+build/
+dist/
+
+# Data & models (large, versioned out-of-band)
+data/
+models/
+mlruns/
+!data/.gitkeep
+!models/.gitkeep
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Env files (never commit)
+.env
+.env.*
+!.env.example
+
+# Docker
+*.pid
+
+# Type checker
+.pyre/
+.pytype/
+
+# Local-only project docs / agent instructions (not for public repo)
+CLAUDE.md
+docs/
+.claude/
