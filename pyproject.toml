@@ -21,6 +21,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# LLM re-ranker adapters. Install with: pip install -e ".[llm]".
+llm = [
+  "accelerate>=0.30",
+  "transformers>=4.45",
+]
+
 dev = [
   "ruff>=0.6",
   "mypy>=1.11",

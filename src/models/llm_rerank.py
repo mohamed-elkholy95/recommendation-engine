@@ -92,9 +92,8 @@ def _build_prompt(
 
 
 def _parse_ranking(raw: str) -> list[tuple[int, str]]:
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
+    payload = _extract_json_object(raw)
+    if payload is None:
         return []
     ranking_field = payload.get("ranking") if isinstance(payload, dict) else None
     if not isinstance(ranking_field, list):
@@ -109,6 +108,43 @@ def _parse_ranking(raw: str) -> list[tuple[int, str]]:
         if isinstance(movie_id, int) and isinstance(reason, str):
             out.append((movie_id, reason))
     return out
+
+
+def _extract_json_object(raw: str) -> dict[str, object] | None:
+    # concept: small LLMs wrap JSON in markdown fences and surrounding prose;
+    # find the first balanced {...} block whose payload parses.
+    for candidate in _candidate_json_blocks(raw):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _candidate_json_blocks(raw: str) -> list[str]:
+    blocks: list[str] = []
+
+    # Try markdown code fences first (```json ... ``` or ``` ... ```).
+    fence_start = raw.find("```")
+    while fence_start != -1:
+        after_fence = fence_start + 3
+        if raw[after_fence:].lstrip().startswith("json"):
+            after_fence = raw.index("\n", after_fence) + 1
+        fence_end = raw.find("```", after_fence)
+        if fence_end == -1:
+            break
+        blocks.append(raw[after_fence:fence_end].strip())
+        fence_start = raw.find("```", fence_end + 3)
+
+    # Then the outermost {...} span as a fallback.
+    first_brace = raw.find("{")
+    last_brace = raw.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        blocks.append(raw[first_brace : last_brace + 1])
+
+    return blocks
 
 
 def _merge_ranking_with_candidates(

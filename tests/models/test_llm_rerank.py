@@ -103,6 +103,41 @@ def test_rerank_falls_back_when_llm_returns_non_json() -> None:
     assert [int(r.item_idx) for r in reranked] == [0, 1, 2]
 
 
+def test_rerank_extracts_json_from_markdown_code_fence() -> None:
+    # concept: small LLMs like to wrap JSON in ```json ... ``` markdown fences.
+    # Extraction must find the payload inside the fence.
+    llm_response = (
+        "Here is the re-ranked list:\n\n"
+        "```json\n"
+        '{"ranking": [{"movie_id": 2, "reason": "best match"}, {"movie_id": 0, "reason": "runner-up"}]}\n'
+        "```\n\nHope this helps!"
+    )
+    reranker = LlmReranker(client=_ScriptedClient(llm_response), timeout=0.5)
+
+    reranked = reranker.rerank(
+        candidates=_candidates(), catalogue=_catalogue(), user_context=""
+    )
+
+    assert [int(r.item_idx) for r in reranked] == [2, 0, 1]
+
+
+def test_rerank_extracts_json_from_prose_wrapped_response() -> None:
+    # concept: some models prefix commentary before the JSON and append more
+    # after. Extraction must find the outermost {...} span.
+    llm_response = (
+        "I will sort these: the user seems to like drama.\n"
+        '{"ranking": [{"movie_id": 1, "reason": "drama"}]}\n'
+        "Let me know if you want another pass."
+    )
+    reranker = LlmReranker(client=_ScriptedClient(llm_response), timeout=0.5)
+
+    reranked = reranker.rerank(
+        candidates=_candidates(), catalogue=_catalogue(), user_context=""
+    )
+
+    assert int(reranked[0].item_idx) == 1
+
+
 def test_rerank_drops_unknown_movie_ids_and_appends_missing_ones() -> None:
     # concept: the LLM can hallucinate IDs not in the candidate set — filter
     # them. Any original candidate the LLM omitted is appended at the end so

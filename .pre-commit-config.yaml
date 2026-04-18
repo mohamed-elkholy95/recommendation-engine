@@ -33,5 +33,6 @@ repos:
           - pandas-stubs>=2.2
           - pydantic>=2.8
           - pytest>=8
+          - transformers>=4.45
         args: [--config-file=pyproject.toml]
         files: ^(src|tests)/
