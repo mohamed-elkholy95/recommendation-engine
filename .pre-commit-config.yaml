@@ -28,5 +28,7 @@ repos:
       - id: mypy
         additional_dependencies:
           - numpy>=1.26
+          - pandas-stubs>=2.2
+          - pytest>=8
         args: [--config-file=pyproject.toml]
         files: ^(src|tests)/
