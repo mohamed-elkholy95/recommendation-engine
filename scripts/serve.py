@@ -1,12 +1,14 @@
-"""Production entry point — fit every model on ml-latest-small, start the API.
+"""Production entry point — fit every model on ml-latest-small (or reload a
+cached fit), then start the API.
 
 Usage:
-    python scripts/serve.py              # runs on 0.0.0.0:8000
+    python scripts/serve.py                      # runs on 0.0.0.0:8000
     HOST=127.0.0.1 PORT=9000 python scripts/serve.py
+    RECO_MODELS_DIR=/tmp/cache python scripts/serve.py
 
-Heavier models (n_factors, n_epochs, pool_size) are intentionally modest so
-the container boots in under ~30 seconds on a laptop-class CPU. Tune via the
-``RECO_*`` environment variables for a beefier deployment.
+Fitted models are pickled to ``$RECO_MODELS_DIR`` (default ``models/``) after
+the first successful fit; subsequent boots reload from that cache and skip
+training entirely (~30s saved per startup on a laptop).
 """
 
 from __future__ import annotations
@@ -25,29 +27,47 @@ from src.models.collaborative import SvdModel
 from src.models.content_based import ContentModel
 from src.models.hybrid import HybridModel
 from src.models.neural_cf import NcfModel
+from src.persistence import load_model, save_model
 
 
 def main() -> int:
     dataset = os.environ.get("RECO_DATASET", "ml-latest-small")
     data_dir = Path(os.environ.get("RECO_DATA_DIR", "data/raw"))
+    models_dir = Path(os.environ.get("RECO_MODELS_DIR", "models"))
     n_factors = int(os.environ.get("RECO_N_FACTORS", "32"))
     n_epochs = int(os.environ.get("RECO_NCF_EPOCHS", "3"))
 
-    print(f"[serve] loading dataset={dataset} from {data_dir}", flush=True)
+    def stage(msg: str) -> None:
+        print(f"[serve] {msg}", flush=True)
+
+    stage(f"loading dataset={dataset} from {data_dir}")
     raw = load_movielens(dataset, data_dir=data_dir)  # type: ignore[arg-type]
     pre = preprocess(raw)
 
-    print(f"[serve] fitting SvdModel(n_factors={n_factors})", flush=True)
-    svd = SvdModel(n_factors=n_factors, seed=42)
-    svd.fit(pre.train, n_users=pre.n_users, n_items=pre.n_items)
+    svd_path = models_dir / "svd.pkl"
+    content_path = models_dir / "content.pkl"
+    ncf_path = models_dir / "ncf.pkl"
 
-    print("[serve] fitting ContentModel", flush=True)
-    content = ContentModel()
-    content.fit(raw.movies, pre)
+    if svd_path.exists() and content_path.exists() and ncf_path.exists():
+        stage(f"reloading cached models from {models_dir}")
+        svd: SvdModel = load_model(svd_path)
+        content: ContentModel = load_model(content_path)
+        neural: NcfModel = load_model(ncf_path)
+    else:
+        stage(f"fitting SvdModel(n_factors={n_factors})")
+        svd = SvdModel(n_factors=n_factors, seed=42)
+        svd.fit(pre.train, n_users=pre.n_users, n_items=pre.n_items)
+        stage("fitting ContentModel")
+        content = ContentModel()
+        content.fit(raw.movies, pre)
+        stage(f"fitting NcfModel(n_epochs={n_epochs})")
+        neural = NcfModel(n_factors=16, n_epochs=n_epochs, seed=42)
+        neural.fit(pre.train, n_users=pre.n_users, n_items=pre.n_items)
 
-    print(f"[serve] fitting NcfModel(n_epochs={n_epochs})", flush=True)
-    neural = NcfModel(n_factors=16, n_epochs=n_epochs, seed=42)
-    neural.fit(pre.train, n_users=pre.n_users, n_items=pre.n_items)
+        stage(f"saving fitted models to {models_dir}")
+        save_model(svd, svd_path)
+        save_model(content, content_path)
+        save_model(neural, ncf_path)
 
     hybrid = HybridModel(
         collaborative=svd,
@@ -65,7 +85,7 @@ def main() -> int:
 
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))
-    print(f"[serve] listening on http://{host}:{port}", flush=True)
+    stage(f"listening on http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
     return 0
 
