@@ -98,3 +98,48 @@ def test_recommend_excludes_seen_items_by_default() -> None:
 
     # Every (user, item) pair is seen → recommend returns empty list.
     assert model.recommend(UserIdx(0), n=3) == []
+
+
+def test_baselines_absorb_a_constant_rating_matrix() -> None:
+    # concept: if every observation is the same rating r, μ = r, both biases
+    # are zero, and the latent factors have nothing to fit — predict returns r
+    # for every pair.
+    users, items = 4, 4
+    rows = [(u, i, 4.2) for u in range(users) for i in range(items)]
+    train = _rank_one_frame([1.0] * users, [1.0] * items).assign(
+        user_idx=[r[0] for r in rows],
+        item_idx=[r[1] for r in rows],
+        rating=[r[2] for r in rows],
+    )
+    train = train.astype(
+        {"user_idx": "int32", "item_idx": "int32", "rating": "float32", "timestamp": "int64"}
+    )
+
+    model = AlsModel(n_factors=2, n_iter=5, seed=0)
+    model.fit(train, n_users=users, n_items=items)
+
+    for u in range(users):
+        for i in range(items):
+            assert model.predict(UserIdx(u), ItemIdx(i)) == pytest.approx(4.2, abs=1e-3)
+
+
+def test_item_bias_lifts_globally_popular_items() -> None:
+    # concept: item 0 is rated 5.0 by everyone; item 1 is rated 1.0 by
+    # everyone. Both items are fully observed — the latent factors must
+    # reconstruct the raw ratings via the item_bias term.
+    rows = [(u, 0, 5.0) for u in range(4)] + [(u, 1, 1.0) for u in range(4)]
+    train = pd.DataFrame(
+        {
+            "user_idx": pd.array([r[0] for r in rows], dtype="int32"),
+            "item_idx": pd.array([r[1] for r in rows], dtype="int32"),
+            "rating": pd.array([r[2] for r in rows], dtype="float32"),
+            "timestamp": pd.array([0] * len(rows), dtype="int64"),
+        }
+    )
+
+    model = AlsModel(n_factors=1, n_iter=10, seed=0)
+    model.fit(train, n_users=4, n_items=2)
+
+    # item_bias[0] should be +2.0 (5 - μ=3), item_bias[1] should be -2.0.
+    assert model._item_bias[0] == pytest.approx(2.0, abs=1e-3)
+    assert model._item_bias[1] == pytest.approx(-2.0, abs=1e-3)

@@ -108,12 +108,18 @@ class SvdModel:
 
 @dataclass
 class AlsModel:
-    """Koren alternating least squares on observed explicit ratings.
+    """Koren baseline + alternating least squares on observed explicit ratings.
 
-    At each iteration the user factors are solved per-user against the current
-    item factors (and vice-versa) over only the ``(u, i)`` pairs actually
-    observed in training, with ``reg * I`` added to the normal-equation
-    matrix for Tikhonov regularisation.
+    Full prediction model::
+
+        r̂_ui = μ + b_u + b_i + x_u · y_i
+
+    where ``μ`` is the global rating mean, ``b_u`` / ``b_i`` are per-user and
+    per-item biases learned by closed form on the raw ratings, and ``x_u``,
+    ``y_i`` are the latent factors ALS fits to the *residuals*
+    ``r_ui − (μ + b_u + b_i)``. Subtracting the baseline before factorising
+    is why this model outperforms the raw-rating ALS on ranking metrics:
+    the factors learn taste, not popularity.
 
     Attributes:
         n_factors: Dimensionality of the latent space.
@@ -133,11 +139,18 @@ class AlsModel:
     _item_factors: FloatArray = field(
         init=False, default_factory=lambda: np.zeros((0, 0), dtype=np.float32)
     )
+    _global_mean: float = field(init=False, default=0.0)
+    _user_bias: FloatArray = field(
+        init=False, default_factory=lambda: np.zeros(0, dtype=np.float32)
+    )
+    _item_bias: FloatArray = field(
+        init=False, default_factory=lambda: np.zeros(0, dtype=np.float32)
+    )
     _seen: dict[UserIdx, set[ItemIdx]] = field(init=False, default_factory=dict)
     _fitted: bool = field(init=False, default=False)
 
     def fit(self, train: pd.DataFrame, *, n_users: int, n_items: int) -> None:
-        """Alternate per-user / per-item least-squares solves ``n_iter`` times.
+        """Fit baseline biases, then run ALS on the residual rating matrix.
 
         Raises:
             ValueError: If ``train`` is empty, ``n_iter < 1``, or ``reg < 0``.
@@ -150,6 +163,19 @@ class AlsModel:
 
         set_all_seeds(self.seed)
         rng = np.random.default_rng(self.seed)
+
+        global_mean, user_bias, item_bias = _fit_baselines(
+            train, n_users=n_users, n_items=n_items
+        )
+        residuals = train.assign(
+            rating=(
+                train["rating"].to_numpy(dtype=np.float32)
+                - global_mean
+                - user_bias[train["user_idx"].to_numpy()]
+                - item_bias[train["item_idx"].to_numpy()]
+            )
+        )
+
         scale = 1.0 / float(np.sqrt(self.n_factors))
         user_factors = (
             rng.standard_normal((n_users, self.n_factors)).astype(np.float32) * scale
@@ -158,7 +184,7 @@ class AlsModel:
             rng.standard_normal((n_items, self.n_factors)).astype(np.float32) * scale
         )
 
-        matrix_csr = _build_sparse_matrix(train, n_users=n_users, n_items=n_items)
+        matrix_csr = _build_sparse_matrix(residuals, n_users=n_users, n_items=n_items)
         matrix_csc = matrix_csr.tocsc()
         reg_eye = (self.reg * np.eye(self.n_factors)).astype(np.float32)
 
@@ -168,12 +194,23 @@ class AlsModel:
 
         self._user_factors = user_factors
         self._item_factors = item_factors
+        self._global_mean = global_mean
+        self._user_bias = user_bias
+        self._item_bias = item_bias
         self._seen = build_seen_dict(train)
         self._fitted = True
 
     def predict(self, user_idx: UserIdx, item_idx: ItemIdx) -> float:
         require_fitted(self._fitted, "AlsModel")
-        return float(self._user_factors[int(user_idx)] @ self._item_factors[int(item_idx)])
+        baseline = (
+            self._global_mean
+            + float(self._user_bias[int(user_idx)])
+            + float(self._item_bias[int(item_idx)])
+        )
+        interaction = float(
+            self._user_factors[int(user_idx)] @ self._item_factors[int(item_idx)]
+        )
+        return baseline + interaction
 
     def recommend(
         self,
@@ -183,13 +220,52 @@ class AlsModel:
         exclude_seen: bool = True,
     ) -> list[tuple[ItemIdx, float]]:
         require_fitted(self._fitted, "AlsModel")
-        scores: FloatArray = self._user_factors[int(user_idx)] @ self._item_factors.T
+        # concept: μ and b_u are constants across items for this user; they do
+        # not change the ranking, but we add them back so scores are on the
+        # original rating scale for downstream consumers (HybridModel fusion).
+        interaction: FloatArray = self._user_factors[int(user_idx)] @ self._item_factors.T
+        scores = (
+            self._global_mean
+            + float(self._user_bias[int(user_idx)])
+            + self._item_bias
+            + interaction
+        ).astype(np.float32)
         return top_k_from_scores(
             scores,
             seen=self._seen.get(user_idx, set()),
             n=n,
             exclude_seen=exclude_seen,
         )
+
+
+def _fit_baselines(
+    train: pd.DataFrame, *, n_users: int, n_items: int
+) -> tuple[float, FloatArray, FloatArray]:
+    # concept: simple closed-form baseline estimator — μ is the global mean;
+    # b_i is the mean per-item residual after μ; b_u is the mean per-user
+    # residual after μ + b_i. Users / items with zero training observations
+    # keep bias 0. This is Koren §2.1 "baseline predictor" without shrinkage.
+    ratings = train["rating"].to_numpy(dtype=np.float32)
+    user_ids = train["user_idx"].to_numpy()
+    item_ids = train["item_idx"].to_numpy()
+
+    global_mean = float(ratings.mean())
+
+    item_bias = np.zeros(n_items, dtype=np.float32)
+    np.add.at(item_bias, item_ids, ratings - global_mean)
+    item_counts = np.zeros(n_items, dtype=np.int64)
+    np.add.at(item_counts, item_ids, 1)
+    nonzero = item_counts > 0
+    item_bias[nonzero] /= item_counts[nonzero]
+
+    user_bias = np.zeros(n_users, dtype=np.float32)
+    np.add.at(user_bias, user_ids, ratings - global_mean - item_bias[item_ids])
+    user_counts = np.zeros(n_users, dtype=np.int64)
+    np.add.at(user_counts, user_ids, 1)
+    nonzero = user_counts > 0
+    user_bias[nonzero] /= user_counts[nonzero]
+
+    return global_mean, user_bias, item_bias
 
 
 def _als_sweep(
