@@ -32,7 +32,7 @@ from src.utils.seed import set_all_seeds
 FloatArray = npt.NDArray[np.float32]
 
 
-class _TwoTower(nn.Module):  # type: ignore[misc]  # torch not in pre-commit's mypy env
+class _TwoTower(nn.Module):  # type: ignore[misc,unused-ignore]  # torch missing from pre-commit mypy env
     """User + item embeddings concatenated, passed through an MLP head."""
 
     def __init__(
