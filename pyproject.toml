@@ -8,9 +8,10 @@ license = { text = "MIT" }
 authors = [{ name = "Mohamed ElKholy", email = "moelkholy1995@gmail.com" }]
 
 # Runtime dependencies are added per-phase as those plans land.
-# Only dev tooling is declared here so the style/test scaffolding works.
 dependencies = [
   "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "pyarrow>=17",
 ]
 
 [project.optional-dependencies]

@@ -16,11 +16,12 @@ build/
 dist/
 
 # Data & models (large, versioned out-of-band)
-data/
-models/
-mlruns/
-!data/.gitkeep
-!models/.gitkeep
+# Scope to top-level only so src/data/ and tests/data/ are not ignored.
+/data/
+/models/
+/mlruns/
+!/data/.gitkeep
+!/models/.gitkeep
 
 # Notebooks
 .ipynb_checkpoints/
