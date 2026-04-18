@@ -129,7 +129,7 @@ The project is delivered as a sequence of small, well-tested phases. Each phase 
 - [x] **Phase 2 — Collaborative filtering baseline.** ALS + SVD baselines with offline NDCG@k / MAP@k.
 - [x] **Phase 3 — Content-based retrieval.** TF-IDF over titles/overviews, genre embeddings.
 - [x] **Phase 4 — Neural CF.** Two-tower MLP trained on implicit signals, ONNX export.
-- [ ] **Phase 5 — Hybrid fusion.** Normalised score fusion + MMR re-ranking for diversity.
+- [x] **Phase 5 — Hybrid fusion.** Normalised score fusion + MMR re-ranking for diversity.
 - [ ] **Phase 6 — API layer.** FastAPI service with `/recommend`, `/rate`, Prometheus metrics.
 - [ ] **Phase 7 — LLM re-ranker (optional).** Bounded-latency re-rank with explanations.
 - [ ] **Phase 8 — Evaluation harness.** Side-by-side comparison of every model on the same test split.
