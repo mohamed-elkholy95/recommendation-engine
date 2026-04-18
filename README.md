@@ -137,6 +137,28 @@ The project is delivered as a sequence of small, well-tested phases. Each phase 
 
 ---
 
+## Offline benchmark — ml-latest-small
+
+`python scripts/compare_models.py --ncf-epochs 5` fits every model on the
+preprocessor's train split and evaluates each (plus the `HybridModel` fusion)
+against the held-out test split using `evaluate_ranking`. Representative run
+(n_users=610, n_items=3650, train=84,174, test=3,050, RTX 5080 + Torch cu132):
+
+| Model    | NDCG@10 | HR@10  | MAP@10 | sec |
+|----------|---------|--------|--------|-----|
+| SVD      | 0.0461  | 0.2180 | 0.0208 | 0.1 |
+| ALS      | 0.0041  | 0.0279 | 0.0014 | 0.1 |
+| Content  | 0.0171  | 0.0951 | 0.0069 | 0.1 |
+| NCF      | 0.0247  | 0.1262 | 0.0108 | 0.2 |
+| Hybrid   | 0.0442  | 0.2246 | 0.0196 | 2.1 |
+
+The hybrid wins on `HR@10` (recall of relevant items in the top-10) while SVD
+edges ahead on `NDCG@10` / `MAP@10`. Koren ALS without mean centering is the
+known-weak baseline; the comparison is intentional — it keeps the math
+transparent rather than hiding it behind a tuned library.
+
+---
+
 ## Engineering principles
 
 - **Hand-computed expected values** in every metric test — range-only asserts hide math bugs.
