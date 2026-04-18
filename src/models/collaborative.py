@@ -2,9 +2,8 @@
 
 Both models factorise the user × item rating matrix into dense ``user_factors``
 and ``item_factors``. Once the factors are in hand, ``predict`` and
-``recommend`` behave identically for the two algorithms, so those methods
-share the module-level ``_predict_from_factors`` / ``_recommend_from_factors``
-helpers below.
+``recommend`` reduce to a dot product and a top-k selection respectively, so
+they delegate to the shared helpers in ``src.models._ranking``.
 
 Mean-centering is deliberately omitted: raw factorisation keeps the math
 inspectable and the tests hand-computable. These are the conceptual
@@ -23,6 +22,12 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
 
 from src.data.ids import ItemIdx, UserIdx
+from src.models._ranking import (
+    build_seen_dict,
+    require_fitted,
+    require_non_empty_train,
+    top_k_from_scores,
+)
 from src.utils.seed import set_all_seeds
 
 FloatArray = npt.NDArray[np.float32]
@@ -60,7 +65,7 @@ class SvdModel:
             ValueError: If ``train`` is empty, or ``n_factors`` is not strictly
                 less than ``min(n_users, n_items)``.
         """
-        _require_non_empty(train)
+        require_non_empty_train(train)
         if self.n_factors >= min(n_users, n_items):
             raise ValueError(
                 f"n_factors ({self.n_factors}) must be < min(n_users, n_items) = "
@@ -75,15 +80,13 @@ class SvdModel:
         left, singular, right_t = svds(matrix, k=self.n_factors)
         self._user_factors = (left[:, ::-1] * singular[::-1]).astype(np.float32)
         self._item_factors = right_t[::-1, :].T.astype(np.float32)
-        self._seen = _build_seen_dict(train)
+        self._seen = build_seen_dict(train)
         self._fitted = True
 
     def predict(self, user_idx: UserIdx, item_idx: ItemIdx) -> float:
         """Reconstructed rating for a single (user, item) pair."""
-        _require_fitted(self._fitted, "SvdModel")
-        return _predict_from_factors(
-            self._user_factors, self._item_factors, user_idx, item_idx
-        )
+        require_fitted(self._fitted, "SvdModel")
+        return float(self._user_factors[int(user_idx)] @ self._item_factors[int(item_idx)])
 
     def recommend(
         self,
@@ -93,11 +96,10 @@ class SvdModel:
         exclude_seen: bool = True,
     ) -> list[tuple[ItemIdx, float]]:
         """Top-``n`` items for a user, sorted by descending reconstructed score."""
-        _require_fitted(self._fitted, "SvdModel")
-        return _recommend_from_factors(
-            self._user_factors,
-            self._item_factors,
-            user_idx=user_idx,
+        require_fitted(self._fitted, "SvdModel")
+        scores: FloatArray = self._user_factors[int(user_idx)] @ self._item_factors.T
+        return top_k_from_scores(
+            scores,
             seen=self._seen.get(user_idx, set()),
             n=n,
             exclude_seen=exclude_seen,
@@ -140,7 +142,7 @@ class AlsModel:
         Raises:
             ValueError: If ``train`` is empty, ``n_iter < 1``, or ``reg < 0``.
         """
-        _require_non_empty(train)
+        require_non_empty_train(train)
         if self.n_iter < 1:
             raise ValueError(f"n_iter must be >= 1, got {self.n_iter}")
         if self.reg < 0:
@@ -166,14 +168,12 @@ class AlsModel:
 
         self._user_factors = user_factors
         self._item_factors = item_factors
-        self._seen = _build_seen_dict(train)
+        self._seen = build_seen_dict(train)
         self._fitted = True
 
     def predict(self, user_idx: UserIdx, item_idx: ItemIdx) -> float:
-        _require_fitted(self._fitted, "AlsModel")
-        return _predict_from_factors(
-            self._user_factors, self._item_factors, user_idx, item_idx
-        )
+        require_fitted(self._fitted, "AlsModel")
+        return float(self._user_factors[int(user_idx)] @ self._item_factors[int(item_idx)])
 
     def recommend(
         self,
@@ -182,20 +182,14 @@ class AlsModel:
         n: int,
         exclude_seen: bool = True,
     ) -> list[tuple[ItemIdx, float]]:
-        _require_fitted(self._fitted, "AlsModel")
-        return _recommend_from_factors(
-            self._user_factors,
-            self._item_factors,
-            user_idx=user_idx,
+        require_fitted(self._fitted, "AlsModel")
+        scores: FloatArray = self._user_factors[int(user_idx)] @ self._item_factors.T
+        return top_k_from_scores(
+            scores,
             seen=self._seen.get(user_idx, set()),
             n=n,
             exclude_seen=exclude_seen,
         )
-
-
-# -----------------------------------------------------------------------------
-# Shared helpers
-# -----------------------------------------------------------------------------
 
 
 def _als_sweep(
@@ -221,40 +215,6 @@ def _als_sweep(
         left[row] = np.linalg.solve(normal, rhs).astype(np.float32)
 
 
-def _predict_from_factors(
-    user_factors: FloatArray,
-    item_factors: FloatArray,
-    user_idx: UserIdx,
-    item_idx: ItemIdx,
-) -> float:
-    return float(user_factors[int(user_idx)] @ item_factors[int(item_idx)])
-
-
-def _recommend_from_factors(
-    user_factors: FloatArray,
-    item_factors: FloatArray,
-    *,
-    user_idx: UserIdx,
-    seen: set[ItemIdx],
-    n: int,
-    exclude_seen: bool,
-) -> list[tuple[ItemIdx, float]]:
-    if n < 1:
-        raise ValueError(f"n must be >= 1, got {n}")
-    scores: FloatArray = user_factors[int(user_idx)] @ item_factors.T
-    if exclude_seen:
-        for item in seen:
-            scores[int(item)] = -np.inf
-
-    finite = np.isfinite(scores)
-    if not finite.any():
-        return []
-    finite_idx = np.flatnonzero(finite)
-    take = min(n, finite_idx.size)
-    top = finite_idx[np.argsort(-scores[finite_idx])][:take]
-    return [(ItemIdx(int(i)), float(scores[i])) for i in top]
-
-
 def _build_sparse_matrix(
     train: pd.DataFrame, *, n_users: int, n_items: int
 ) -> csr_matrix:
@@ -266,20 +226,3 @@ def _build_sparse_matrix(
         shape=(n_users, n_items),
         dtype=np.float32,
     )
-
-
-def _build_seen_dict(train: pd.DataFrame) -> dict[UserIdx, set[ItemIdx]]:
-    seen: dict[UserIdx, set[ItemIdx]] = {}
-    for user_raw, item_raw in zip(train["user_idx"], train["item_idx"], strict=True):
-        seen.setdefault(UserIdx(int(user_raw)), set()).add(ItemIdx(int(item_raw)))
-    return seen
-
-
-def _require_non_empty(train: pd.DataFrame) -> None:
-    if len(train) == 0:
-        raise ValueError("train must contain at least one rating")
-
-
-def _require_fitted(fitted: bool, model_name: str) -> None:
-    if not fitted:
-        raise RuntimeError(f"{model_name}.fit() must be called before predict/recommend")
