@@ -125,3 +125,24 @@ def test_recommend_rejects_non_positive_n() -> None:
     model.fit(train, n_users=8, n_items=8)
     with pytest.raises(ValueError, match="n must"):
         model.recommend(UserIdx(0), n=0)
+
+
+def test_device_auto_picks_cuda_when_available() -> None:
+    # concept: "auto" must select CUDA if torch.cuda.is_available(); otherwise
+    # fall back to CPU. This is the only cross-device contract callers depend on.
+    import torch
+
+    train = _separable_clusters_frame()
+    model = NcfModel(n_factors=4, hidden=(8,), n_epochs=1, seed=0, device="auto")
+    model.fit(train, n_users=8, n_items=8)
+
+    expected = "cuda" if torch.cuda.is_available() else "cpu"
+    assert model._device.type == expected
+
+
+def test_device_respects_explicit_cpu_override() -> None:
+    train = _separable_clusters_frame()
+    model = NcfModel(n_factors=4, hidden=(8,), n_epochs=1, seed=0, device="cpu")
+    model.fit(train, n_users=8, n_items=8)
+
+    assert model._device.type == "cpu"

@@ -77,8 +77,12 @@ class NcfModel:
     negatives_per_positive: int = 4
     positive_threshold: float = 4.0
     seed: int = 42
+    # concept: "auto" picks CUDA when available and falls back to CPU. Any
+    # explicit torch.device string ("cpu", "cuda", "cuda:0") is passed through.
+    device: str = "auto"
 
     _net: nn.Module | None = field(init=False, default=None)
+    _device: torch.device = field(init=False, default_factory=lambda: torch.device("cpu"))
     _n_items: int = field(init=False, default=0)
     _seen: dict[UserIdx, set[ItemIdx]] = field(init=False, default_factory=dict)
     _fitted: bool = field(init=False, default=False)
@@ -104,7 +108,10 @@ class NcfModel:
         pos_users = positives["user_idx"].to_numpy(dtype=np.int64)
         pos_items = positives["item_idx"].to_numpy(dtype=np.int64)
 
-        net = _TwoTower(n_users, n_items, self.n_factors, tuple(self.hidden))
+        self._device = _resolve_device(self.device)
+        net = _TwoTower(n_users, n_items, self.n_factors, tuple(self.hidden)).to(
+            self._device
+        )
         optimiser = torch.optim.Adam(net.parameters(), lr=self.lr)
         loss_fn = nn.BCEWithLogitsLoss()
         rng = np.random.default_rng(self.seed)
@@ -129,9 +136,9 @@ class NcfModel:
             net.train()
             for start in range(0, len(users), self.batch_size):
                 end = start + self.batch_size
-                u_batch = torch.from_numpy(users[start:end])
-                i_batch = torch.from_numpy(items[start:end])
-                y_batch = torch.from_numpy(labels[start:end])
+                u_batch = torch.from_numpy(users[start:end]).to(self._device)
+                i_batch = torch.from_numpy(items[start:end]).to(self._device)
+                y_batch = torch.from_numpy(labels[start:end]).to(self._device)
 
                 optimiser.zero_grad()
                 logits = net(u_batch, i_batch)
@@ -150,8 +157,8 @@ class NcfModel:
         assert self._net is not None
         self._net.eval()
         with torch.no_grad():
-            user_tensor = torch.tensor([int(user_idx)], dtype=torch.long)
-            item_tensor = torch.tensor([int(item_idx)], dtype=torch.long)
+            user_tensor = torch.tensor([int(user_idx)], dtype=torch.long, device=self._device)
+            item_tensor = torch.tensor([int(item_idx)], dtype=torch.long, device=self._device)
             logit = self._net(user_tensor, item_tensor)
             return float(torch.sigmoid(logit).item())
 
@@ -168,9 +175,9 @@ class NcfModel:
         self._net.eval()
         with torch.no_grad():
             user_tensor = torch.full(
-                (self._n_items,), int(user_idx), dtype=torch.long
+                (self._n_items,), int(user_idx), dtype=torch.long, device=self._device
             )
-            item_tensor = torch.arange(self._n_items, dtype=torch.long)
+            item_tensor = torch.arange(self._n_items, dtype=torch.long, device=self._device)
             logits = self._net(user_tensor, item_tensor)
             scores = torch.sigmoid(logits).cpu().numpy().astype(np.float32)
         return top_k_from_scores(
@@ -191,6 +198,12 @@ class NcfModel:
             )
         if self.lr <= 0:
             raise ValueError(f"lr must be > 0, got {self.lr}")
+
+
+def _resolve_device(requested: str) -> torch.device:
+    if requested == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(requested)
 
 
 def _sample_negatives(
