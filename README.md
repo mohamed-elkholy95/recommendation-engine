@@ -125,7 +125,7 @@ uv pip install -e ".[dev]"
 The project is delivered as a sequence of small, well-tested phases. Each phase lands with its own tests, metrics, and documentation.
 
 - [x] **Phase 0 — Tooling & style.** ruff, mypy, pytest, pre-commit, CI-ready scaffolding, determinism helper.
-- [ ] **Phase 1 — Data pipeline.** MovieLens loaders, k-core filtering, temporal train/val/test splits, `user_map` / `item_map`.
+- [x] **Phase 1 — Data pipeline.** MovieLens loaders, k-core filtering, temporal train/val/test splits, `user_map` / `item_map`.
 - [ ] **Phase 2 — Collaborative filtering baseline.** ALS + SVD baselines with offline NDCG@k / MAP@k.
 - [ ] **Phase 3 — Content-based retrieval.** TF-IDF over titles/overviews, genre embeddings.
 - [ ] **Phase 4 — Neural CF.** Two-tower MLP trained on implicit signals, ONNX export.
