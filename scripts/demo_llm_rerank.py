@@ -11,9 +11,10 @@ Usage:
     python scripts/demo_llm_rerank.py
     RECO_LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct USER_ID=1 N=10 python scripts/demo_llm_rerank.py
 
-Defaults to ``google/gemma-4-E2B-it`` — Gemma 4 Effective-2B instruct,
-~4 GB fp16, reliable JSON output, ~1-2 s inference on a laptop GPU. Any
-instruction-tuned HF model should work; swap via ``RECO_LLM_MODEL``.
+Defaults to ``google/gemma-4-E2B-it`` — Gemma 4 Effective-2B instruct
+(~9.8 GB bf16 safetensors on disk; ~2-3 s inference on a laptop GPU
+once loaded). Any instruction-tuned HF model should work; swap via
+``RECO_LLM_MODEL``.
 
 Gemma models are gated — the HF account running the demo must accept the
 Gemma license at https://huggingface.co/google/gemma-4-E2B-it first.

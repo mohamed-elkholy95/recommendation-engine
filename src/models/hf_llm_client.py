@@ -10,12 +10,14 @@ in::
 
     pip install -e ".[llm]"
 
-Default is ``google/gemma-4-E2B-it`` — latest Gemma 4 generation, 2B
-effective parameters, instruction-tuned, ~4 GB fp16, reliable JSON inside
-a markdown fence, runs in ~1-2 seconds on a laptop GPU. Alternatives via
-``RECO_LLM_MODEL`` env var / ``model=`` arg: ``Qwen/Qwen3-1.7B`` (~3.5
-GB), ``Qwen/Qwen3-4B-Instruct-2507`` (~8 GB, higher quality), or
-``Qwen/Qwen3-0.6B`` (~1.5 GB, smallest viable).
+Default is ``google/gemma-4-E2B-it`` — latest Gemma 4 generation,
+"Effective 2B" instruct variant (matryoshka-style; the on-disk
+safetensors is ~9.8 GB bf16), reliable JSON inside a markdown fence,
+runs in ~2-3 seconds on a laptop GPU once loaded. Alternatives via
+``RECO_LLM_MODEL`` env var / ``model=`` arg, sorted by footprint:
+``Qwen/Qwen3-0.6B`` (~1.5 GB) for the smallest viable, ``Qwen/Qwen3-1.7B``
+(~3.5 GB) for a balanced pick, ``Qwen/Qwen3-4B-Instruct-2507`` (~8 GB)
+for higher quality.
 
 Gated models like ``google/gemma-*`` require that the HF account running
 this code has accepted the model license on the HF website first.
