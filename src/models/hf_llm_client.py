@@ -10,10 +10,15 @@ in::
 
     pip install -e ".[llm]"
 
-Any tiny instruction-tuned model works. On a laptop-class CPU, defaults that
-converge quickly: ``Qwen/Qwen2.5-0.5B-Instruct`` (~1 GB, JSON-friendly) or
-``TinyLlama/TinyLlama-1.1B-Chat-v1.0`` (~2 GB). On GPU they run in under a
-second per re-rank.
+Default is ``google/gemma-4-E2B-it`` — latest Gemma 4 generation, 2B
+effective parameters, instruction-tuned, ~4 GB fp16, reliable JSON inside
+a markdown fence, runs in ~1-2 seconds on a laptop GPU. Alternatives via
+``RECO_LLM_MODEL`` env var / ``model=`` arg: ``Qwen/Qwen3-1.7B`` (~3.5
+GB), ``Qwen/Qwen3-4B-Instruct-2507`` (~8 GB, higher quality), or
+``Qwen/Qwen3-0.6B`` (~1.5 GB, smallest viable).
+
+Gated models like ``google/gemma-*`` require that the HF account running
+this code has accepted the model license on the HF website first.
 """
 
 from __future__ import annotations
@@ -52,7 +57,7 @@ class HuggingFaceClient:
             ``_pipeline_factory`` is supplied for tests.
     """
 
-    model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    model: str = "google/gemma-4-E2B-it"
     max_new_tokens: int = 512
     device: str = "auto"
     _pipeline_factory: PipelineFactory = field(default=_default_pipeline_factory)

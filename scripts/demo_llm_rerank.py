@@ -11,8 +11,12 @@ Usage:
     python scripts/demo_llm_rerank.py
     RECO_LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct USER_ID=1 N=10 python scripts/demo_llm_rerank.py
 
-Defaults to ``Qwen/Qwen2.5-0.5B-Instruct`` — small enough to load on CPU or
-a laptop GPU in a few seconds. Any instruction-tuned HF model should work.
+Defaults to ``google/gemma-4-E2B-it`` — Gemma 4 Effective-2B instruct,
+~4 GB fp16, reliable JSON output, ~1-2 s inference on a laptop GPU. Any
+instruction-tuned HF model should work; swap via ``RECO_LLM_MODEL``.
+
+Gemma models are gated — the HF account running the demo must accept the
+Gemma license at https://huggingface.co/google/gemma-4-E2B-it first.
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ def main() -> int:
     dataset = os.environ.get("RECO_DATASET", "ml-latest-small")
     data_dir = Path(os.environ.get("RECO_DATA_DIR", "data/raw"))
     models_dir = Path(os.environ.get("RECO_MODELS_DIR", "models"))
-    model_name = os.environ.get("RECO_LLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+    model_name = os.environ.get("RECO_LLM_MODEL", "google/gemma-4-E2B-it")
     raw_user_id = int(os.environ.get("USER_ID", "1"))
     n = int(os.environ.get("N", "10"))
 
